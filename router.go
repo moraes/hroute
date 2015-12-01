@@ -95,7 +95,7 @@ func (r *Router) URL(name string, p Params) *url.URL {
 // ServeHTTP dispatches to the handler whose pattern matches the request.
 func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	if handler, vars := r.router.matcher.Match(req); handler != nil {
-		handler.ServeHTTP(w, req, vars)
+		handler(w, req, vars)
 		return
 	}
 	http.NotFound(w, req)

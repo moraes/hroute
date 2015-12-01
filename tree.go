@@ -15,9 +15,7 @@ type Param struct {
 
 type Params []Param
 
-type Handler interface {
-	ServeHTTP(http.ResponseWriter, *http.Request, Params)
-}
+type Handler func(http.ResponseWriter, *http.Request, Params)
 
 type node struct {
 	// path holds the path segment matched by
