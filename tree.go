@@ -2,7 +2,8 @@ package hrouter
 
 import (
 	"bytes"
-	"log"
+	"fmt"
+	//"log"
 	"net/http"
 	"strings"
 )
@@ -37,13 +38,8 @@ type node struct {
 	// here. Note that it will always be a leaf if present.
 	catchAll *node
 
-	// handler holds the handler registered for this node.
-	handler Handler
-
-	// emptyParams holds the handler parameters with names
-	// filled out but empty values. This is empty when handler is
-	// nil.
-	emptyParams []Param
+	// route holds the route registered for this node.
+	route *Route
 }
 
 // addStaticPrefix adds a route to the given node for the
@@ -53,7 +49,7 @@ type node struct {
 // by the pattern.
 //
 // Precondition: pat.static is either empty or its first element is empty.
-func (n *node) addStaticPrefix(prefix string, pat pattern, h Handler) {
+func (n *node) addStaticPrefix(prefix string, pat pattern) (*Route, error) {
 	common := commonPrefix(prefix, n.path)
 	if len(common) < len(n.path) {
 		// This node's prefix is too long; split it,
@@ -78,14 +74,12 @@ func (n *node) addStaticPrefix(prefix string, pat pattern, h Handler) {
 			})
 		}
 		// Descend further into the tree.
-		n.child[i].addStaticPrefix(prefix[1:], pat, h)
-		return
+		return n.child[i].addStaticPrefix(prefix[1:], pat)
 	}
 	// Invariant: common == prefix
 	if len(pat.static) == 0 {
 		// We've arrived at our destination.
-		n.setHandler(h, pat.vars)
-		return
+		return n.setRoute(pat.vars)
 	}
 	// We're adding a wildcard, which might be a
 	// single segment or a final catch-all segment.
@@ -102,24 +96,27 @@ func (n *node) addStaticPrefix(prefix string, pat pattern, h Handler) {
 	// Invariant: pat.static is either empty or its first element is non-empty.
 	if len(pat.static) == 0 {
 		// We've reach our destination.
-		n.setHandler(h, pat.vars)
-		return
+		return n.setRoute(pat.vars)
 	}
 	// Descend further into the tree
 	prefix = pat.static[0]
 	pat.static = pat.static[1:]
-	n.addStaticPrefix(prefix, pat, h)
+	return n.addStaticPrefix(prefix, pat)
 }
 
-func (n *node) setHandler(h Handler, vars []string) {
-	if n.handler != nil {
-		panic("duplicate route")
+func (n *node) setRoute(vars []string) (*Route, error) {
+	if n.route != nil {
+		return nil, fmt.Errorf("duplicate route")
 	}
-	n.handler = h
-	n.emptyParams = make([]Param, len(vars))
+	p := make([]Param, len(vars))
 	for i, v := range vars {
-		n.emptyParams[i].Name = v
+		p[i].Name = v
 	}
+	n.route = &Route{
+		Handlers: map[string]Handler{},
+		Params:   p,
+	}
+	return n.route, nil
 }
 
 func (n *node) addChild(firstByte byte, n1 *node) int {
@@ -177,14 +174,14 @@ func lookup(n *node, path string) (*node, Params) {
 	if n == nil {
 		return nil, nil
 	}
-	if n.handler == nil {
+	if n.route == nil {
 		return nil, nil
 	}
 	if len(vars) == 0 {
 		return n, nil
 	}
 	p := make(Params, len(vars))
-	copy(p, n.emptyParams)
+	copy(p, n.route.Params)
 	for i, v := range vars {
 		p[i].Value = v
 	}
