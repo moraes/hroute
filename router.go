@@ -55,8 +55,8 @@ func (r *Router) Name(name string) *Router {
 
 // Mount imports all routes from the given router into this one.
 //
-// Combined with Sub() and Name(), it is possible to submount routes using
-// pattern and name prefixes:
+// Combined with Sub() and Name(), it is possible to submount a router
+// defined in a different package using pattern and name prefixes:
 //
 //     r := New()
 //     s := r.Sub("/admin").Name("admin:").Mount(admin.Router)
@@ -84,7 +84,7 @@ func (r *Router) Route(pattern string) *Route {
 	return route
 }
 
-// URL returns a URL segment for the given route name and variables.
+// URL returns a URL for the given route name and variables.
 func (r *Router) URL(name string, p Params) *url.URL {
 	if route, ok := r.router.namedRoutes[name]; ok {
 		return r.router.matcher.URL(route, p)

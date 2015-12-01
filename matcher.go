@@ -31,17 +31,21 @@ func (m *matcher) Route(pattern string) (*Route, error) {
 	}
 	var prefix string
 	prefix, pat.static = pat.static[0], pat.static[1:]
-	route, err := m.root.addStaticPrefix(prefix, pat)
+	r, err := m.root.addStaticPrefix(prefix, pat)
 	if err != nil {
 		return nil, err
 	}
-	return route, nil
+	return r, nil
 }
 
 func (m *matcher) Match(r *http.Request) (Handler, Params) {
-	// TODO...
-	// node, p := lookup(m.root, r.Path)
-	return nil, nil
+	// TODO: handle NotFound and strict slashes (matcher options).
+	node, p := lookup(m.root, r.Path)
+	if node == nil {
+		return nil, nil
+	}
+	h := methodHandler(node.route.Handlers, r.Method)
+	return h, p
 }
 
 func (m *matcher) URL(r *Route, p Params) *url.URL {
@@ -50,38 +54,41 @@ func (m *matcher) URL(r *Route, p Params) *url.URL {
 }
 
 // methodHandler returns the handler registered for the given HTTP method.
-func methodHandler(handlers map[string]Handler, method string) Handler {
-	if h, ok := handlers[method]; ok {
+func methodHandler(h map[string]Handler, method string) Handler {
+	if h, ok := h[method]; ok {
 		return h
 	}
 	switch method {
 	case "OPTIONS":
-		return r.allowHandler(handlers, 200)
+		return r.allowHandler(h, 200)
 	case "HEAD":
-		if h, ok := handlers["GET"]; ok {
+		if h, ok := h["GET"]; ok {
 			return h
 		}
 		fallthrough
 	default:
-		if h, ok := handlers[""]; ok {
+		if h, ok := h[""]; ok {
 			return h
 		}
 	}
-	return r.allowHandler(handlers, 405)
+	return r.allowHandler(h, 405)
 }
 
 // allowHandler returns a handler that sets a header with the given
 // status code and allowed methods.
-func allowHandler(handlers map[string]Handler, code int) Handler {
-	allowed := []string{"OPTIONS"}
-	for m, _ := range handlers {
+func allowHandler(h map[string]Handler, code int) Handler {
+	allowed := make([]string, len(h)+1)
+	allowed[0] = "OPTIONS"
+	i := 1
+	for m, _ := range h {
 		if m != "" && m != "OPTIONS" {
-			allowed = append(allowed, m)
+			allowed[i] = m
+			i++
 		}
 	}
-	return func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request, p Params) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		w.Header().Set("Allow", strings.Join(allowed, ", "))
+		w.Header().Set("Allow", strings.Join(allowed[:i], ", "))
 		w.WriteHeader(code)
 		fmt.Fprintln(w, code, http.StatusText(code))
 	}
